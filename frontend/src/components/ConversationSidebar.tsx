@@ -36,12 +36,12 @@ export const ConversationSidebar: React.FC = () => {
   };
 
   return (
-    <div className="w-[260px] bg-slate-950 flex flex-col h-full text-gray-300 border-r border-gray-800">
+    <div className="w-[260px] bg-gray-900 flex flex-col h-full text-gray-300 border-r border-gray-800 dark-scrollbar">
       {/* New Chat Button */}
-      <div className="p-3 border-b border-gray-800">
+      <div className="p-2">
         <button
           onClick={handleNewChat}
-          className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-white bg-transparent border border-gray-700 rounded-lg hover:bg-gray-800 transition-colors duration-150"
+          className="w-full flex items-center gap-3 px-3 py-3 text-sm text-white bg-transparent border border-gray-700 rounded-lg hover:bg-gray-800 transition-colors duration-150"
         >
           <svg
             className="w-4 h-4"
@@ -61,7 +61,7 @@ export const ConversationSidebar: React.FC = () => {
       </div>
 
       {/* Chat History */}
-      <div className="flex-1 overflow-y-auto px-2 pb-2">
+      <div className="flex-1 overflow-y-auto px-2 py-2">
         {conversationsLoading ? (
           <div className="flex items-center justify-center py-8">
             <div className="animate-spin rounded-full h-5 w-5 border-2 border-gray-600 border-t-gray-400"></div>
@@ -77,14 +77,13 @@ export const ConversationSidebar: React.FC = () => {
       </div>
 
       {/* User Profile */}
-      <div className="p-3 border-t border-gray-800">
-        <div className="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-gray-800 transition-colors cursor-pointer">
-          <div className="w-7 h-7 bg-gray-700 rounded-full flex items-center justify-center">
-            <span className="text-white text-xs font-medium">U</span>
+      <div className="p-2 border-t border-gray-800">
+        <div className="flex items-center gap-3 px-3 py-3 rounded-lg hover:bg-gray-800 transition-colors cursor-pointer">
+          <div className="w-8 h-8 bg-green-600 rounded-sm flex items-center justify-center">
+            <span className="text-white text-sm font-semibold">U</span>
           </div>
           <div className="flex-1 min-w-0">
             <div className="text-white text-sm font-medium truncate">User</div>
-            <div className="text-gray-500 text-xs truncate">Free Plan</div>
           </div>
         </div>
       </div>

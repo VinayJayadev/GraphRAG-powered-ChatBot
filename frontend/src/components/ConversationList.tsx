@@ -50,8 +50,8 @@ export const ConversationList: React.FC<ConversationListProps> = ({
   if (conversations.length === 0) {
     return (
       <div className="text-center py-8 px-4">
-        <p className="text-gray-500 text-sm">No conversations yet</p>
-        <p className="mt-2 text-xs text-gray-600">Start a new chat to begin</p>
+        <p className="text-gray-400 text-sm">No conversations yet</p>
+        <p className="mt-2 text-xs text-gray-500">Start a new chat to begin</p>
       </div>
     );
   }
@@ -66,16 +66,16 @@ export const ConversationList: React.FC<ConversationListProps> = ({
         return (
           <div
             key={conv.id}
-            className={`relative group cursor-pointer rounded-md transition-all duration-150 ${
+            className={`relative group cursor-pointer rounded-lg transition-all duration-150 ${
               isActive
                 ? 'bg-gray-800'
-                : 'hover:bg-gray-800/50'
+                : 'hover:bg-gray-800/70'
             }`}
             onMouseEnter={() => setHoveredId(conv.id)}
             onMouseLeave={() => setHoveredId(null)}
             onClick={() => onSelectConversation(conv.id)}
           >
-            <div className="px-3 py-2.5">
+            <div className="px-3 py-3">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
@@ -107,7 +107,7 @@ export const ConversationList: React.FC<ConversationListProps> = ({
                   <button
                     onClick={(e) => handleDelete(e, conv.id)}
                     disabled={isDeleting}
-                    className={`flex-shrink-0 p-1 rounded hover:bg-gray-700 text-gray-400 hover:text-gray-200 transition-colors ${
+                    className={`flex-shrink-0 p-1.5 rounded hover:bg-gray-700 text-gray-400 hover:text-gray-200 transition-colors ${
                       isDeleting ? 'opacity-50 cursor-not-allowed' : ''
                     }`}
                     title="Delete conversation"
