@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.endpoints import chat, conversations
 from app.core.config import get_settings
-from app.models.database import init_db, engine
+from app.models.database import init_db, engine, Base
 from app.models import chat_models
 
 settings = get_settings()
@@ -30,15 +30,15 @@ async def startup_event():
     
     if is_db_available() and engine:
         try:
-            # Create tables
-            ChatModelsBase.metadata.create_all(bind=engine)
-            print("✅ Database tables initialized successfully")
+            # Create tables - use Base from database module which is shared
+            Base.metadata.create_all(bind=engine)
+            print("Database tables initialized successfully")
         except Exception as e:
-            print(f"⚠️ WARNING: Could not initialize database tables: {e}")
-            print("⚠️ The application will continue but chat history will not be saved")
+            print(f"WARNING: Could not initialize database tables: {e}")
+            print("The application will continue but chat history will not be saved")
     else:
-        print("⚠️ Database not available - chat history features disabled")
-        print("⚠️ To enable chat history, set up PostgreSQL and configure DATABASE_URL in .env")
+        print("Database not available - chat history features disabled")
+        print("To enable chat history, set up PostgreSQL and configure DATABASE_URL in .env")
 
 # Include routers
 app.include_router(chat.router, prefix="/api", tags=["chat"])

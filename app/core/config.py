@@ -5,7 +5,7 @@ from functools import lru_cache
 
 class Settings(BaseSettings):
     # API Keys
-    OPENROUTER_API_KEY: str
+    OPENROUTER_API_KEY: Optional[str] = None
     BRAVE_API_KEY: Optional[str] = None  # Match the JS implementation
     
     # Vector Database
@@ -32,12 +32,33 @@ class Settings(BaseSettings):
     USE_MCP: bool = False
     
     # Database
-    DATABASE_URL: Optional[str] = "postgresql://postgres:postgres@localhost:5432/rag_chatbot"
+    DATABASE_URL: Optional[str] = None
     
     class Config:
         env_file = ".env"
+        
 
 
-@lru_cache()
+_settings_instance = None
+
 def get_settings() -> Settings:
-    return Settings()
+    """Get settings instance. Cache is cleared on import to ensure fresh settings."""
+    global _settings_instance
+    if _settings_instance is None:
+        _settings_instance = Settings()
+        # Warn if OPENROUTER_API_KEY is not set
+        if not _settings_instance.OPENROUTER_API_KEY or _settings_instance.OPENROUTER_API_KEY == "your-openrouter-api-key-here":
+            try:
+                print("WARNING: OPENROUTER_API_KEY is not set or is using placeholder value.")
+                print("Please set OPENROUTER_API_KEY in your .env file to use the chat functionality.")
+                print("Get your API key from: https://openrouter.ai")
+            except UnicodeEncodeError:
+                # Fallback for Windows console encoding issues
+                print("WARNING: OPENROUTER_API_KEY is not set or is using placeholder value.")
+                print("Please set OPENROUTER_API_KEY in your .env file to use the chat functionality.")
+    return _settings_instance
+
+def clear_settings_cache():
+    """Clear the settings cache. Useful for testing or when .env changes."""
+    global _settings_instance
+    _settings_instance = None

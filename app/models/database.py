@@ -12,27 +12,35 @@ SessionLocal = None
 _db_available = False
 
 try:
-    # Create database engine
-    engine = create_engine(
-        settings.DATABASE_URL or "postgresql://postgres:postgres@localhost:5432/rag_chatbot",
-        pool_pre_ping=True,
-        echo=settings.DEBUG,
-        connect_args={"connect_timeout": 5}
-    )
-    # Test connection
-    from sqlalchemy import text
-    with engine.connect() as conn:
-        conn.execute(text("SELECT 1"))
-    _db_available = True
-    print("✅ Database connection successful")
-    
-    # Create session factory
-    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    # Only try to connect if DATABASE_URL is provided and not empty
+    db_url = settings.DATABASE_URL
+    if db_url and db_url.strip():
+        # Create database engine
+        engine = create_engine(
+            db_url,
+            pool_pre_ping=True,
+            echo=settings.DEBUG,
+            connect_args={"connect_timeout": 3}
+        )
+        # Test connection with a shorter timeout
+        from sqlalchemy import text
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        _db_available = True
+        print("Database connection successful")
+        
+        # Create session factory
+        SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    else:
+        print("DATABASE_URL not configured - chat history features disabled")
+        _db_available = False
 except Exception as e:
-    print(f"⚠️ WARNING: Could not connect to database: {e}")
-    print("⚠️ Chat history features will be disabled. The app will continue to work without database.")
-    print("⚠️ To enable chat history, please set up PostgreSQL and update DATABASE_URL in .env")
+    print(f"WARNING: Could not connect to database: {str(e)}")
+    print("Chat history features will be disabled. The app will continue to work without database.")
+    print("To enable chat history, please set up PostgreSQL and update DATABASE_URL in .env")
     _db_available = False
+    engine = None
+    SessionLocal = None
 
 # Base class for models
 Base = declarative_base()
@@ -56,7 +64,7 @@ def get_db():
     try:
         yield db
     except OperationalError as e:
-        print(f"⚠️ Database connection error: {e}")
+        print(f"Database connection error: {e}")
         db.rollback()
         raise
     finally:

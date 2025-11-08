@@ -1,12 +1,10 @@
 from sqlalchemy import Column, String, Text, DateTime, ForeignKey, Enum as SQLEnum, JSON
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
-from sqlalchemy.ext.declarative import declarative_base
+from app.models.database import Base
 from datetime import datetime
 import uuid
 import enum
-
-Base = declarative_base()
 
 
 class MessageRole(str, enum.Enum):

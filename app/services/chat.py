@@ -13,15 +13,24 @@ class ChatService:
         self.vector_store = VectorStore()
         self.graph_rag = GraphRAG()
         
-        # Configure OpenRouter client
+        # Get fresh settings to ensure we have the latest API key
+        current_settings = get_settings()
+        
+        # Configure OpenRouter client with current settings
+        if not current_settings.OPENROUTER_API_KEY:
+            raise ValueError(
+                "OPENROUTER_API_KEY is not configured. "
+                "Please set it in the .env file and restart the server."
+            )
+        
         self.openai_client = openai.OpenAI(
-            api_key=settings.OPENROUTER_API_KEY,
+            api_key=current_settings.OPENROUTER_API_KEY,
             base_url="https://openrouter.ai/api/v1"
         )
         
         self.tool_gateway = ToolGateway()
-        print("✅ Tool service initialized successfully")
-        print("✅ OpenRouter client initialized successfully")
+        print("Tool service initialized successfully")
+        print("OpenRouter client initialized successfully")
         
     async def get_response(self, query: str, chat_history: List[Dict[str, str]] = None) -> Dict[str, Any]:
         """Generate a response using RAG and OpenRouter with tool execution."""
@@ -153,9 +162,27 @@ INSTRUCTIONS:
         
         messages = [system_message] + messages + [{"role": "user", "content": query}]
         
+        # Check if API key is configured before making the request
+        if not settings.OPENROUTER_API_KEY or settings.OPENROUTER_API_KEY == "your-openrouter-api-key-here":
+            error_msg = (
+                "OPENROUTER_API_KEY is not configured. "
+                "Please set your API key in the .env file. "
+                "Get your API key from: https://openrouter.ai/keys"
+            )
+            print(f"ERROR: {error_msg}")
+            return {
+                "response": error_msg,
+                "context": enhanced_context,
+                "sources": [],
+                "metadata": {
+                    "model": "openai/gpt-3.5-turbo",
+                    "error": "API key not configured",
+                }
+            }
+        
         # Generate response using OpenRouter
         try:
-            print(f"🤖 DEBUG: Generating response with OpenRouter...")
+            print(f"DEBUG: Generating response with OpenRouter...")
             response = self.openai_client.chat.completions.create(
                 model="openai/gpt-3.5-turbo",  # Using GPT-3.5 Turbo which is more reliable
                 messages=messages,
@@ -170,14 +197,31 @@ INSTRUCTIONS:
             # We'll format it in the frontend for better presentation
             
         except Exception as e:
-            print(f"❌ DEBUG: OpenRouter API call failed: {str(e)}")
+            error_str = str(e)
+            print(f"DEBUG: OpenRouter API call failed: {error_str}")
+            
+            # Provide more helpful error messages
+            if "401" in error_str or "No auth credentials" in error_str or "Invalid API key" in error_str or "Unauthorized" in error_str:
+                error_msg = (
+                    "Authentication failed. Please check your OPENROUTER_API_KEY in the .env file. "
+                    "Make sure it's set correctly (without quotes) and restart the server after updating it. "
+                    "Get your API key from: https://openrouter.ai/keys"
+                )
+            elif "403" in error_str or "Forbidden" in error_str:
+                error_msg = (
+                    "Access forbidden. Please check your OpenRouter API key permissions and account status. "
+                    "Visit https://openrouter.ai to verify your account."
+                )
+            else:
+                error_msg = f"API Error: {error_str}. Please check your API key and try again."
+            
             return {
-                "response": f"Sorry, I encountered an error: {str(e)}",
+                "response": error_msg,
                 "context": enhanced_context,
-                "sources": [],  # Always return sources as a list
+                "sources": [],
                 "metadata": {
                     "model": "openai/gpt-3.5-turbo",
-                    "error": str(e),
+                    "error": error_str,
                 }
             }
         
