@@ -34,11 +34,14 @@ class ChatService:
         
     async def get_response(self, query: str, chat_history: List[Dict[str, str]] = None) -> Dict[str, Any]:
         """Generate a response using RAG and OpenRouter with tool execution."""
-        enhanced_context = []
+        # Store the top matching document for citation
+        top_document = None
+        top_source_info = None
+        
         try:
-            # Get relevant documents from knowledge base
+            # Get relevant documents from knowledge base (get multiple for analysis, but use only top one)
             relevant_docs = self.vector_store.semantic_search(query, limit=5)
-            print(f"🔍 DEBUG: Vector search found {len(relevant_docs)} documents from knowledge base")
+            print(f"DEBUG: Vector search found {len(relevant_docs)} documents from knowledge base")
             
             # Show what documents were found
             for i, doc in enumerate(relevant_docs):
@@ -46,47 +49,63 @@ class ChatService:
                     topic = doc.get('metadata', {}).get('topic', 'Unknown')
                     category = doc.get('metadata', {}).get('category', 'Unknown')
                     score = doc.get('score', 0.0)
-                    print(f"   📄 {i+1}. {topic} ({category}) - Score: {score:.3f}")
+                    print(f"   Document {i+1}. {topic} ({category}) - Score: {score:.3f}")
                 except Exception as e:
-                    print(f"   ⚠️ Could not parse document {i+1}: {e}")
+                    print(f"   Could not parse document {i+1}: {e}")
             
-            # Enhance context using graph-based retrieval
+            # Select only the highest scoring document (top match)
             if relevant_docs:
-                doc_ids = [f"doc_{i}" for i in range(len(relevant_docs))]
-                for doc_id, doc in zip(doc_ids, relevant_docs):
-                    try:
-                        self.graph_rag.add_document(
-                            doc_id=doc_id,
-                            text=doc.get("text", ""),
-                            embedding=self.vector_store.encoder.encode(doc.get("text", "")),
-                            metadata=doc.get("metadata", {})
-                        )
-                    except Exception as e:
-                        print(f"⚠️ WARNING: Could not add document {doc_id} to graph: {e}")
+                # Sort by score (highest first) and take the top one
+                sorted_docs = sorted(relevant_docs, key=lambda x: x.get('score', 0.0), reverse=True)
+                top_document = sorted_docs[0]
                 
-                try:
-                    enhanced_context = self.graph_rag.get_context(doc_ids)
-                    print(f"🔗 DEBUG: Graph RAG enhanced context to {len(enhanced_context)} documents")
-                    
-                    # Add scores from original search to enhanced context
-                    for enhanced_doc in enhanced_context:
-                        doc_idx = int(enhanced_doc["id"].replace("doc_", ""))
-                        if doc_idx < len(relevant_docs):
-                            enhanced_doc["score"] = relevant_docs[doc_idx].get("score", 0.0)
-                except Exception as e:
-                    print(f"⚠️ WARNING: Graph RAG context retrieval failed: {e}")
-                    # Fallback to original documents with scores
-                    enhanced_context = [
-                        {
-                            "id": f"doc_{i}",
-                            "text": doc.get("text", ""),
-                            "metadata": doc.get("metadata", {}),
-                            "score": doc.get("score", 0.0)
-                        }
-                        for i, doc in enumerate(relevant_docs)
-                    ]
+                print(f"DEBUG: Using top match - Score: {top_document.get('score', 0.0):.3f}")
+                print(f"DEBUG: Top document topic: {top_document.get('metadata', {}).get('topic', 'Unknown')}")
+                
+                # Prepare the single document for context
+                enhanced_context = [{
+                    "id": "doc_0",
+                    "text": top_document.get("text", ""),
+                    "metadata": top_document.get("metadata", {}),
+                    "score": top_document.get("score", 0.0)
+                }]
+                
+                # Prepare source info for citation
+                metadata = top_document.get("metadata", {})
+                topic = metadata.get("topic", "Unknown")
+                source_type = metadata.get("source", "")
+                
+                # Get filename from metadata - only knowledge_base files have this
+                filename = metadata.get("filename")
+                
+                # Only consider it a valid file if:
+                # 1. Filename exists in metadata
+                # 2. Filename is not "Unknown"
+                # 3. Source is not "original" (original test docs don't have files)
+                has_file = (
+                    filename is not None 
+                    and filename != "Unknown" 
+                    and source_type != "original"
+                )
+                
+                # If no valid filename, set to None
+                if not has_file:
+                    filename = None
+                
+                top_source_info = {
+                    "type": "knowledge_base",
+                    "topic": topic,
+                    "category": metadata.get("category", "Unknown"),
+                    "filename": filename,  # None for sources without files
+                    "score": top_document.get("score", 0.0),
+                    "relevance_score": f"{top_document.get('score', 0.0):.3f}",
+                    "has_file": has_file  # Explicit flag to indicate if file exists
+                }
+            else:
+                enhanced_context = []
+                print("DEBUG: No documents found in knowledge base")
         except Exception as e:
-            print(f"⚠️ WARNING: Error during RAG retrieval: {e}")
+            print(f"WARNING: Error during RAG retrieval: {e}")
             enhanced_context = []
         
         # Prepare conversation context
@@ -97,12 +116,62 @@ class ChatService:
                 if "assistant" in msg:
                     messages.append({"role": "assistant", "content": msg["assistant"]})
         
-        # Create knowledge base context
-        knowledge_sources = []
+        # Create knowledge base context from top document only
+        # Limit context to prevent sending entire documents (max 2000 characters for context)
         context_str = ""
-        if enhanced_context:
-            context_str = "\n\n".join([doc["text"] for doc in enhanced_context])
-            knowledge_sources = [doc['metadata'].get('topic', 'Unknown') for doc in enhanced_context]
+        if enhanced_context and len(enhanced_context) > 0:
+            # Use only the top document (highest score)
+            top_doc = enhanced_context[0]
+            full_text = top_doc["text"]
+            
+            # Create a limited context for the LLM (first 2000 characters)
+            # This prevents the LLM from repeating the entire document
+            if len(full_text) > 2000:
+                context_str = full_text[:2000] + "..."
+            else:
+                context_str = full_text
+            
+            # Get source information for citation (fallback if not already set)
+            if top_source_info is None:
+                metadata = top_doc.get("metadata", {})
+                topic = metadata.get("topic", "Unknown")
+                source_type = metadata.get("source", "")
+                
+                # Get filename from metadata - only knowledge_base files have this
+                filename = metadata.get("filename")
+                
+                # Only consider it a valid file if:
+                # 1. Filename exists in metadata
+                # 2. Filename is not "Unknown"
+                # 3. Source is not "original" (original test docs don't have files)
+                has_file = (
+                    filename is not None 
+                    and filename != "Unknown" 
+                    and source_type != "original"
+                )
+                
+                # If no valid filename, set to None
+                if not has_file:
+                    filename = None
+                
+                # Create text preview for source display (first 300 chars)
+                preview_text = full_text[:300] + "..." if len(full_text) > 300 else full_text
+                
+                top_source_info = {
+                    "type": "knowledge_base",
+                    "topic": topic,
+                    "category": metadata.get("category", "Unknown"),
+                    "filename": filename,  # None for sources without files
+                    "score": top_doc.get("score", 0.0),
+                    "relevance_score": f"{top_doc.get('score', 0.0):.3f}",
+                    "has_file": has_file,  # Explicit flag to indicate if file exists
+                    "text_preview": preview_text  # Short preview for UI
+                }
+            else:
+                # Add text preview to existing top_source_info if not already set
+                if 'text_preview' not in top_source_info:
+                    preview_text = full_text[:300] + "..." if len(full_text) > 300 else full_text
+                    top_source_info['text_preview'] = preview_text
         
         # Determine if we need web search (expanded triggers for more comprehensive answers)
         needs_web_search = any(keyword in query.lower() for keyword in [
@@ -125,33 +194,55 @@ class ChatService:
         else:
             print(f"KB DEBUG: Using knowledge base only (no web search needed)")
         
-        # Create system message prioritizing knowledge base
+        # Create system message with single top source
+        source_name = "the knowledge base"
+        if top_source_info:
+            source_name = f"'{top_source_info.get('topic', 'the knowledge base')}' from the knowledge base"
+            source_category = top_source_info.get('category', '')
+            if source_category:
+                source_name += f" (Category: {source_category})"
+        
         if context_str and web_search_result:
             system_content = f"""You are a helpful AI assistant with access to a knowledge base and current web information.
 
-KNOWLEDGE BASE CONTEXT (Primary Source):
+PRIMARY SOURCE (Highest Matching Document from Knowledge Base):
+Source: {source_name}
+Relevance Score: {top_source_info.get('relevance_score', 'N/A') if top_source_info else 'N/A'}
+
+RELEVANT CONTENT FROM PRIMARY SOURCE (excerpt):
 {context_str}
 
-CURRENT WEB INFORMATION (Secondary Source):
+CURRENT WEB INFORMATION (Supplementary):
 {web_search_result}
 
 INSTRUCTIONS:
-1. Prioritize the knowledge base context for your main answer
-2. Use web information only to supplement or update knowledge base information
-3. Always cite your sources in your response
-4. If knowledge base has sufficient information, use it as the primary source"""
+1. Provide a CONCISE, natural answer based on the knowledge base content above
+2. DO NOT repeat or copy the entire document - only use relevant information that answers the user's question
+3. Use web information only to supplement or provide additional context if needed
+4. ALWAYS cite the source: Mention "{source_name}" in your response (e.g., "According to {source_name}, ...")
+5. Keep your response focused and answer only what was asked
+6. If the primary source doesn't fully answer the question, acknowledge this and use web information to fill gaps
+7. The user can click on the source to view the full document if they need more details"""
         elif context_str:
             system_content = f"""You are a helpful AI assistant with access to a knowledge base.
 
-KNOWLEDGE BASE CONTEXT:
+PRIMARY SOURCE (Highest Matching Document):
+Source: {source_name}
+Relevance Score: {top_source_info.get('relevance_score', 'N/A') if top_source_info else 'N/A'}
+
+RELEVANT CONTENT FROM SOURCE (excerpt):
 {context_str}
 
 INSTRUCTIONS:
-1. Answer based primarily on the knowledge base context provided
-2. If the context doesn't contain enough information, acknowledge this limitation
-3. Always mention that your answer is based on the knowledge base
-4. If the user asks for more details, suggest they ask for "more information" or "additional details" to get web search results
-5. Do not make up information not in the context"""
+1. Provide a CONCISE, natural answer based on the content provided above
+2. DO NOT repeat or copy the entire document - only extract and present relevant information that answers the user's question
+3. ALWAYS cite the source at the beginning or end of your response
+4. Format your response naturally: "According to {source_name}, [your concise answer]" or "[your concise answer] (Source: {source_name})"
+5. Keep your response focused - answer only what was asked, not everything in the document
+6. If the source doesn't contain enough information to fully answer the question, acknowledge this limitation
+7. Do not make up information not in the provided source
+8. The user can click on the source citation to view the full document if they need more details
+9. Your answer should be brief and to the point - the full document is available if the user wants to read it"""
         else:
             system_content = """You are a helpful AI assistant. The knowledge base search didn't return relevant results for this query. Please provide a general answer based on your training data and mention that you don't have specific information in your knowledge base for this topic."""
         
@@ -187,7 +278,7 @@ INSTRUCTIONS:
                 model="openai/gpt-3.5-turbo",  # Using GPT-3.5 Turbo which is more reliable
                 messages=messages,
                 temperature=0.7,
-                max_tokens=1000
+                max_tokens=500  # Reduced to encourage concise responses
             )
             
             # Get response text
@@ -225,49 +316,39 @@ INSTRUCTIONS:
                 }
             }
         
-        # Prepare sources with document references
+        # Prepare sources - only include the top matching document
         sources_list = []
         
-        # Add knowledge base sources with document details
-        if enhanced_context:
-            print(f"📚 DEBUG: Preparing {len(enhanced_context)} sources for response")
-            for doc in enhanced_context:
-                try:
-                    doc_metadata = doc.get("metadata", {})
-                    source_info = {
-                        "type": "knowledge_base",
-                        "topic": doc_metadata.get("topic", "Unknown"),
-                        "category": doc_metadata.get("category", "Unknown"),
-                        "filename": doc_metadata.get("filename", "Unknown"),
-                        "text_preview": doc.get("text", "")[:200] + "..." if len(doc.get("text", "")) > 200 else doc.get("text", ""),
-                        "score": doc.get("score", 0.0) if "score" in doc else None
-                    }
-                    sources_list.append(source_info)
-                    print(f"   ✅ Added source: {source_info['topic']} ({source_info['category']})")
-                except Exception as e:
-                    print(f"   ⚠️ Error creating source info: {e}")
+        # Add only the top matching knowledge base source
+        if top_source_info:
+            print(f"DEBUG: Preparing top source for citation: {top_source_info.get('topic', 'Unknown')}")
+            sources_list.append(top_source_info)
+            print(f"   Added source: {top_source_info.get('topic')} (Score: {top_source_info.get('relevance_score', 'N/A')})")
         else:
-            print("📚 DEBUG: No enhanced_context available for sources")
+            print("DEBUG: No top source available for citation")
         
-        # Add web search source if used
+        # Add web search source if used (as supplementary)
         if web_search_result:
             sources_list.append({
                 "type": "web_search",
                 "source": "Brave Search API",
-                "query": query
+                "query": query,
+                "note": "Supplementary information"
             })
-            print(f"🌐 DEBUG: Added web search source")
+            print(f"DEBUG: Added web search as supplementary source")
         
-        print(f"📋 DEBUG: Total sources in response: {len(sources_list)}")
+        print(f"DEBUG: Total sources in response: {len(sources_list)} (Primary: {len([s for s in sources_list if s.get('type') == 'knowledge_base'])})")
         
         return {
             "response": response_text,
-            "context": enhanced_context,
-            "sources": sources_list,  # Always include sources, even if empty
+            "context": enhanced_context,  # Contains only the top matching document
+            "sources": sources_list,  # Contains only the top source for citation
             "metadata": {
                 "model": response.model,
                 "total_tokens": response.usage.total_tokens,
-                "rag_documents_used": len(enhanced_context),
+                "rag_documents_used": 1 if enhanced_context else 0,  # Only top document
+                "top_match_score": enhanced_context[0].get("score", 0.0) if enhanced_context else None,
                 "web_search_used": bool(web_search_result),
+                "primary_source": top_source_info.get("topic", "None") if top_source_info else "None"
             }
         }

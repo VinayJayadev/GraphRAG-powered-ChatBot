@@ -47,15 +47,6 @@ export const ConversationList: React.FC<ConversationListProps> = ({
     return date.toLocaleDateString();
   };
 
-  if (conversations.length === 0) {
-    return (
-      <div className="text-center py-8 px-4">
-        <p className="text-gray-400 text-sm">No conversations yet</p>
-        <p className="mt-2 text-xs text-gray-500">Start a new chat to begin</p>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-1">
       {conversations.map((conv) => {
@@ -68,38 +59,62 @@ export const ConversationList: React.FC<ConversationListProps> = ({
             key={conv.id}
             className={`relative group cursor-pointer rounded-lg transition-all duration-150 ${
               isActive
-                ? 'bg-gray-800'
-                : 'hover:bg-gray-800/70'
+                ? 'bg-green-600/20 border border-green-600/30'
+                : 'hover:bg-gray-800/70 border border-transparent'
             }`}
             onMouseEnter={() => setHoveredId(conv.id)}
             onMouseLeave={() => setHoveredId(null)}
             onClick={() => onSelectConversation(conv.id)}
           >
-            <div className="px-3 py-3">
-              <div className="flex items-center justify-between gap-2">
+            <div className="px-3 py-2.5">
+              <div className="flex items-start justify-between gap-2">
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <svg
-                      className="w-4 h-4 text-gray-500 flex-shrink-0"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
-                      />
-                    </svg>
-                    <h3
-                      className={`text-sm truncate ${
-                        isActive ? 'text-white' : 'text-gray-300'
-                      }`}
-                      title={conv.title}
-                    >
-                      {conv.title}
-                    </h3>
+                  <div className="flex items-start gap-2.5">
+                    <div className={`flex-shrink-0 mt-0.5 ${
+                      isActive ? 'text-green-400' : 'text-gray-500'
+                    }`}>
+                      <svg
+                        className="w-4 h-4"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+                        />
+                      </svg>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h3
+                        className={`text-sm font-medium truncate mb-1 ${
+                          isActive ? 'text-white' : 'text-gray-200'
+                        }`}
+                        title={conv.title}
+                      >
+                        {conv.title}
+                      </h3>
+                      {conv.preview && (
+                        <p className="text-xs text-gray-400 line-clamp-2 mb-1">
+                          {conv.preview}
+                        </p>
+                      )}
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="text-xs text-gray-500">
+                          {formatDate(conv.updated_at)}
+                        </span>
+                        {conv.message_count > 0 && (
+                          <>
+                            <span className="text-gray-600">•</span>
+                            <span className="text-xs text-gray-500">
+                              {conv.message_count} message{conv.message_count !== 1 ? 's' : ''}
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
 
@@ -107,14 +122,14 @@ export const ConversationList: React.FC<ConversationListProps> = ({
                   <button
                     onClick={(e) => handleDelete(e, conv.id)}
                     disabled={isDeleting}
-                    className={`flex-shrink-0 p-1.5 rounded hover:bg-gray-700 text-gray-400 hover:text-gray-200 transition-colors ${
+                    className={`flex-shrink-0 p-1.5 rounded-md hover:bg-gray-700/50 text-gray-400 hover:text-red-400 transition-colors ${
                       isDeleting ? 'opacity-50 cursor-not-allowed' : ''
                     }`}
                     title="Delete conversation"
                   >
                     {isDeleting ? (
                       <svg
-                        className="w-3.5 h-3.5 animate-spin"
+                        className="w-4 h-4 animate-spin"
                         fill="none"
                         viewBox="0 0 24 24"
                       >
@@ -134,7 +149,7 @@ export const ConversationList: React.FC<ConversationListProps> = ({
                       </svg>
                     ) : (
                       <svg
-                        className="w-3.5 h-3.5"
+                        className="w-4 h-4"
                         fill="none"
                         stroke="currentColor"
                         viewBox="0 0 24 24"
@@ -143,7 +158,7 @@ export const ConversationList: React.FC<ConversationListProps> = ({
                           strokeLinecap="round"
                           strokeLinejoin="round"
                           strokeWidth={2}
-                          d="M6 18L18 6M6 6l12 12"
+                          d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
                         />
                       </svg>
                     )}

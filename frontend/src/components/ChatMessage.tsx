@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { Message } from '@/types/chat';
 import { UserCircleIcon } from '@heroicons/react/24/solid';
 import { GlobeAltIcon, BookOpenIcon } from '@heroicons/react/24/outline';
+import { SourceModal } from './SourceModal';
 
 interface ChatMessageProps {
   message: Message;
@@ -10,6 +11,7 @@ interface ChatMessageProps {
 
 export const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
   const isUser = message.role === 'user';
+  const [selectedSource, setSelectedSource] = useState<{ filename: string; topic?: string } | null>(null);
 
   // Get sources from metadata if available
   const sources = message.metadata?.sources || [];
@@ -26,6 +28,16 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
       metadata: message.metadata,
     });
   }
+
+  const handleSourceClick = (source: any) => {
+    // Only allow clicking if it's a knowledge base source with a valid filename
+    if (source.type === 'knowledge_base' && source.filename && source.filename !== 'Unknown' && source.has_file !== false) {
+      setSelectedSource({
+        filename: source.filename,
+        topic: source.topic,
+      });
+    }
+  };
 
   return (
     <div className={`group w-full text-gray-800 ${!isUser ? 'bg-gray-50' : 'bg-white'} border-b border-gray-100`}>
@@ -99,38 +111,63 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
               <div className="mt-6 pt-4 border-t border-gray-200">
                 <div className="mb-3">
                   <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                    Sources
+                    {sources.filter(s => s.type === 'knowledge_base').length > 0 ? 'Primary Source' : 'Sources'}
                   </span>
                 </div>
                 <div className="space-y-2">
                   {sources.map((source, index) => {
+                    // Highlight primary source (knowledge base) differently
+                    const isPrimary = source.type === 'knowledge_base';
+                    
                     if (source.type === 'knowledge_base') {
+                      // Check if this source has a clickable file
+                      const hasClickableFile = source.filename && source.filename !== 'Unknown' && source.has_file !== false;
+                      
                       return (
                         <div
                           key={index}
-                          className="bg-gray-100 border border-gray-200 rounded-md p-3 hover:bg-gray-200 transition-colors"
-                          title={`Relevance score: ${source.score?.toFixed(3) || 'N/A'}`}
+                          className={`bg-blue-50 border-2 border-blue-200 rounded-md p-3 transition-colors ${
+                            hasClickableFile 
+                              ? 'hover:bg-blue-100 cursor-pointer' 
+                              : 'cursor-default'
+                          }`}
+                          title={
+                            hasClickableFile 
+                              ? `Click to view source file - Relevance score: ${source.relevance_score || source.score?.toFixed(3) || 'N/A'}`
+                              : `Primary source - Relevance score: ${source.relevance_score || source.score?.toFixed(3) || 'N/A'} (No file available)`
+                          }
+                          onClick={() => hasClickableFile && handleSourceClick(source)}
                         >
                           <div className="flex items-start gap-2">
-                            <BookOpenIcon className="h-4 w-4 text-gray-600 mt-0.5 flex-shrink-0" />
+                            <BookOpenIcon className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
                             <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <span className="text-xs font-medium text-gray-900">
+                              <div className="flex items-center gap-2 flex-wrap mb-1">
+                                <span className={`text-xs font-semibold text-blue-900 ${
+                                  hasClickableFile ? 'hover:text-blue-700 underline' : ''
+                                }`}>
                                   {source.topic || source.filename || 'Knowledge Base'}
                                 </span>
+                                <span className="text-xs font-medium text-blue-700 bg-blue-200 px-2 py-0.5 rounded">
+                                  Primary Source
+                                </span>
                                 {source.category && (
-                                  <span className="text-xs text-gray-600 bg-gray-200 px-2 py-0.5 rounded">
+                                  <span className="text-xs text-blue-600 bg-blue-100 px-2 py-0.5 rounded">
                                     {source.category}
                                   </span>
                                 )}
-                                {source.score !== undefined && source.score !== null && (
-                                  <span className="text-xs text-gray-500">
-                                    ({(source.score * 100).toFixed(1)}% match)
+                                {(source.relevance_score || source.score) && (
+                                  <span className="text-xs text-blue-600 font-medium">
+                                    Match: {source.relevance_score || ((source.score || 0) * 100).toFixed(1) + '%'}
+                                  </span>
+                                )}
+                                {hasClickableFile && (
+                                  <span className="text-xs text-blue-600 italic">
+                                    (Click to view file)
                                   </span>
                                 )}
                               </div>
                               {source.text_preview && (
-                                <p className="text-xs text-gray-700 mt-1 line-clamp-2">
+                                <p className="text-xs text-blue-800 mt-1 line-clamp-2">
                                   {source.text_preview}
                                 </p>
                               )}
@@ -147,9 +184,16 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
                           <div className="flex items-start gap-2">
                             <GlobeAltIcon className="h-4 w-4 text-gray-600 mt-0.5 flex-shrink-0" />
                             <div className="flex-1">
-                              <span className="text-xs font-medium text-gray-900">
-                                {source.source || 'Web Search'}
-                              </span>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-xs font-medium text-gray-900">
+                                  {source.source || 'Web Search'}
+                                </span>
+                                {source.note && (
+                                  <span className="text-xs text-gray-600 bg-gray-200 px-2 py-0.5 rounded">
+                                    {source.note}
+                                  </span>
+                                )}
+                              </div>
                               {source.query && (
                                 <p className="text-xs text-gray-700 mt-1">
                                   Query: "{source.query}"
@@ -168,6 +212,16 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
           </div>
         </div>
       </div>
+
+      {/* Source Modal */}
+      {selectedSource && (
+        <SourceModal
+          isOpen={!!selectedSource}
+          onClose={() => setSelectedSource(null)}
+          filename={selectedSource.filename}
+          topic={selectedSource.topic}
+        />
+      )}
     </div>
   );
 };

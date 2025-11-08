@@ -50,5 +50,13 @@ export const api = {
       return response.data;
     },
   },
+
+  // Knowledge Base
+  knowledgeBase: {
+    getFile: async (filename: string) => {
+      const response = await axios.get(`${API_BASE_URL}/knowledge-base/${filename}`);
+      return response.data;
+    },
+  },
 };
 

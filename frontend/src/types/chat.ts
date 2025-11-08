@@ -16,8 +16,11 @@ export interface Source {
   filename?: string;
   text_preview?: string;
   score?: number;
+  relevance_score?: string; // String format like "0.856"
   source?: string;
   query?: string;
+  note?: string; // For supplementary sources
+  has_file?: boolean; // Added to indicate if a file exists for this source
 }
 
 export interface Conversation {
@@ -59,7 +62,9 @@ export interface ChatResponse {
     model: string;
     total_tokens: number;
     rag_documents_used?: number;
+    top_match_score?: number;
     web_search_used?: boolean;
+    primary_source?: string;
   };
   sources?: Source[];
 }

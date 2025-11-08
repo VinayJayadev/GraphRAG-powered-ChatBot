@@ -72,8 +72,10 @@ export const ChatWindow: React.FC = () => {
       // Update conversation ID if this is a new conversation
       if (response.conversation_id && !currentConversationId) {
         useChatStore.getState().currentConversationId = response.conversation_id;
-        await loadConversations();
       }
+      
+      // Reload conversations after sending message to update the sidebar
+      await loadConversations();
 
       // Add assistant message with sources
       console.log('📋 ChatWindow: Received response with sources:', {
